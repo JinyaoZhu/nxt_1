@@ -75,21 +75,29 @@ public class GuidanceAT {
 	 * Thus every next line starts where the last line ends and the last line ends where the first line starts.
 	 * This documentation for line0 hold for all lines.
 	 */
-	static Line line0 = new Line(  0,  0, 180,  0);
-	static Line line1 = new Line(180,  0, 180, 60);
-	static Line line2 = new Line(180, 60, 150, 60);
-	static Line line3 = new Line(150, 60, 150, 30);
-	static Line line4 = new Line(150, 30,  30, 30);
-	static Line line5 = new Line( 30, 30,  30, 60);
-	static Line line6 = new Line( 30, 60,   0, 60);
-	static Line line7 = new Line(  0, 60,   0,  0);
+//	static Line line0 = new Line(  0,  0, 180,  0);
+//	static Line line1 = new Line(180,  0, 180, 60);
+//	static Line line2 = new Line(180, 60, 150, 60);
+//	static Line line3 = new Line(150, 60, 150, 30);
+//	static Line line4 = new Line(150, 30,  30, 30);
+//	static Line line5 = new Line( 30, 30,  30, 60);
+//	static Line line6 = new Line( 30, 60,   0, 60);
+//	static Line line7 = new Line(  0, 60,   0,  0);
+	
+	static Line line0 = new Line(  0,  0, 75,  0);
+	static Line line1 = new Line(75,  0, 75, 60);
+	static Line line2 = new Line(75, 60, 45, 60);
+	static Line line3 = new Line(45, 60, 45, 30);
+	static Line line4 = new Line(45, 30,  0, 30);
+	static Line line5 = new Line( 0, 30,  0, 0); //cm
+	
 	/**
 	 * map of the robot course. The course consists of a closed chain of straight lines.
 	 * Thus every next line starts where the last line ends and the last line ends where the first line starts.
 	 * All above defined lines are bundled in this array and to form the course map.
 	 */
-	static Line[] map = {line0, line1, line2, line3, line4, line5, line6, line7};
-	
+//	static Line[] map = {line0, line1, line2, line3, line4, line5, line6, line7};
+	static Line[] map = {line0, line1, line2, line3, line4, line5};
 	
 	/**
 	 * main method of project 'ParkingRobot'
@@ -106,7 +114,7 @@ public class GuidanceAT {
 		NXTMotor leftMotor  = new NXTMotor(MotorPort.A);
 		NXTMotor rightMotor = new NXTMotor(MotorPort.B);
 		
-//		RConsole.openBluetooth(0);
+		RConsole.openBluetooth(0);
 		
 		IMonitor monitor = new Monitor();
 		
@@ -114,6 +122,7 @@ public class GuidanceAT {
 		perception.calibrateLineSensors();
 		
 		INavigation navigation = new NavigationAT(perception, monitor);
+		navigation.setMap(map);
 		IControl    control    = new ControlRST(perception, navigation, leftMotor, rightMotor, monitor);
 		INxtHmi  	hmi        = new HmiPLT(perception, navigation, control, monitor);
 		
@@ -219,11 +228,13 @@ public class GuidanceAT {
 	 * @param navigation reference to the navigation class for getting pose information
 	 */
 	protected static void showData(INavigation navigation, IPerception perception){
-		LCD.clear();	
-		
+		LCD.clear(0);
 		LCD.drawString("X (in cm): " + (navigation.getPose().getX()*100), 0, 0);
+		LCD.clear(1);
 		LCD.drawString("Y (in cm): " + (navigation.getPose().getY()*100), 0, 1);
+		LCD.clear(2);
 		LCD.drawString("Phi (grd): " + (navigation.getPose().getHeading()/Math.PI*180), 0, 2);
+		LCD.clear(4);
 		switch (getCurrentStatus()){
 		case DRIVING:
 			LCD.drawString("STATE:DRIVING", 0, 4);

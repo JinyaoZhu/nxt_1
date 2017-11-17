@@ -116,16 +116,28 @@ public class PerceptionPMP implements IPerception {
 	public int getLeftLineSensorValue(){
 		//the next line gives bin output, remove in the next version
 		//return ((this.LeftLineSensor-this.LSlblack)/(this.LSlwhite-this.LSlblack))*100;
+		//MODIFIED
+		if(this.LeftLineSensor<this.LSlblack)
+			return 0;
+		if(this.LeftLineSensor>this.LSlwhite)
+			return 100;
 		return ((this.LeftLineSensor-this.LSlblack) *100/(this.LSlwhite-this.LSlblack));
 	}
 	
 	public int getRightLineSensorValue(){
 		//the next line gives bin output, remove in the next version
 		//return ((this.RightLineSensor-this.LSrblack)/(this.LSrwhite-this.LSrblack))*100;
+		//MODIFIED
+		if(this.RightLineSensor<this.LSrblack)
+			return 0;
+		if(this.RightLineSensor>this.LSrwhite)
+			return 100;
 		return ((this.RightLineSensor-this.LSrblack) *100/(this.LSrwhite-this.LSrblack));
 	}
 	
 	public synchronized void calibrateLineSensors(){
+		float r_sum = 0;
+		float l_sum = 0;
 		LCD.clear();
 		LCD.drawString("Kalibriere", 0, 0);
 		LCD.drawString("Liniensensor", 0, 1);
@@ -138,8 +150,26 @@ public class PerceptionPMP implements IPerception {
 			updateSensors();
 		}
 		Button.ENTER.waitForPressAndRelease();
-		this.LSrwhite = this.RightLineSensor;
-		this.LSlwhite = this.LeftLineSensor;
+		//MODIFIED START
+		LCD.clear();
+		LCD.drawString("Collecting data:", 0, 0);
+		LCD.drawChar('[', 0, 2);
+		LCD.drawChar(']', 15, 2);
+		for(int i=0;i<1000;i++) {
+			updateSensors();
+			l_sum += this.LeftLineSensor;
+			r_sum += this.RightLineSensor;
+			LCD.drawChar('*', 1+(i/76), 2);
+			LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
+		}
+		this.LSrwhite = (int) (r_sum/1000.0 + 0.5);
+		this.LSlwhite = (int) (l_sum/1000.0 + 0.5);
+		LCD.drawString("L White:"+this.LSlwhite, 0, 3);
+		LCD.drawString("R White:"+this.LSrwhite, 0, 4);
+		LCD.drawString("Finish!", 0, 6);
+		LCD.drawString("Press Enter...", 0, 7);
+		Button.ENTER.waitForPressAndRelease();
+		//MODIFIED END
 		LCD.clear();
 		LCD.drawString("Kalibriere", 0, 0);
 		LCD.drawString("Liniensensor", 0, 1);
@@ -152,8 +182,34 @@ public class PerceptionPMP implements IPerception {
 			updateSensors();
 		}
 		Button.ENTER.waitForPressAndRelease();
-		this.LSrblack = this.RightLineSensor;
-		this.LSlblack = this.LeftLineSensor;
+		//MODIFIED START
+		r_sum = l_sum = 0;
+		LCD.clear();
+		LCD.drawString("Collecting data:", 0, 0);
+		LCD.drawChar('[', 0, 2);
+		LCD.drawChar(']', 15, 2);
+		for(int i=0;i<1000;i++) {
+			updateSensors();
+			l_sum += this.LeftLineSensor;
+			r_sum += this.RightLineSensor;
+			LCD.drawChar('*', 1+(i/76), 2);
+			LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
+		}
+		this.LSrblack = (int) (r_sum/1000.0 + 0.5);
+		this.LSlblack = (int) (l_sum/1000.0 + 0.5);
+		LCD.drawString("L BLack:"+this.LSlblack, 0, 3);
+		LCD.drawString("R BLack:"+this.LSrblack, 0, 4);
+		LCD.drawString("Finish!", 0, 6);
+		LCD.drawString("Press Enter...", 0, 7);
+		Button.ENTER.waitForPressAndRelease();
+		if((this.LSrblack >= this.LSrwhite)||(this.LSlblack >= this.LSlwhite)) {
+			LCD.clear();
+			LCD.drawString("Black>=White", 2, 3);
+			LCD.drawString("Error!!!", 5, 5);
+			Button.ENTER.waitForPressAndRelease();
+			System.exit(0);
+		}
+		//MODIFIED END
 	}
 	
 	public void showSensorData() {

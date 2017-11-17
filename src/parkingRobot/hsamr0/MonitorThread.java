@@ -24,7 +24,7 @@ public class MonitorThread extends Thread {
         while(true){
         	try{
             	monitor.run();
-	            Thread.sleep(10);
+	            Thread.sleep(1);
         	} catch(InterruptedException ie){	        		
         	}
         }

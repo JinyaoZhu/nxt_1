@@ -51,11 +51,11 @@ public class ControlRST implements IControl {
 	/**
 	 * robot specific constant: radius of left wheel
 	 */
-	static final double LEFT_WHEEL_RADIUS	= 	0.027; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double LEFT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: radius of right wheel
 	 */
-	static final double RIGHT_WHEEL_RADIUS	= 	0.027; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double RIGHT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: distance between wheels
 	 */
@@ -89,8 +89,7 @@ public class ControlRST implements IControl {
 	
     double currentDistance = 0.0;
     double Distance = 0.0;
-  
-	
+    	
 	/**
 	 * provides the reference transfer so that the class knows its corresponding navigation object (to obtain the current 
 	 * position of the car from) and starts the control thread.
@@ -235,18 +234,7 @@ public class ControlRST implements IControl {
 	 */
 	private void update_LINECTRL_Parameter(){
 		this.lineSensorRight		= perception.getRightLineSensorValue();
-		this.lineSensorLeft  		= perception.getLeftLineSensorValue();	
-		
-		if(this.lineSensorRight	> 100)
-			this.lineSensorRight= 100;
-		else if(this.lineSensorRight < 0)
-			this.lineSensorRight=0;
-		
-		if(this.lineSensorLeft	> 100)
-			this.lineSensorLeft= 100;
-		else if(this.lineSensorLeft < 0)
-			this.lineSensorLeft=0;
-		
+		this.lineSensorLeft  		= perception.getLeftLineSensorValue();			
 	}
 	
 	/**
@@ -284,8 +272,8 @@ public class ControlRST implements IControl {
 		
 		float v_line_follow = 0.14f;
 				
-		if(lineSensorLeft < 5) {
-			if(lineSensorRight < 5) {
+		if(lineSensorLeft < 7) {
+			if(lineSensorRight < 7) {
 				
 			}
 			else {
@@ -293,8 +281,8 @@ public class ControlRST implements IControl {
 			}
 		}
 		
-		if(lineSensorRight < 5) {
-			if(lineSensorLeft<5) {
+		if(lineSensorRight < 7) {
+			if(lineSensorLeft<7) {
 	
 			}
 			else {
@@ -302,12 +290,11 @@ public class ControlRST implements IControl {
 			}
 		}
 		
-		if((lineSensorRight >= 5) && (lineSensorLeft>=5)) {
-			omega_line_follow = (lineSensorRight-lineSensorLeft)*0.006f;
+		if((lineSensorRight >= 7) && (lineSensorLeft>=7)) {
+			omega_line_follow = (lineSensorRight-lineSensorLeft)*0.007f;
 		}
 		
 		drive(v_line_follow,omega_line_follow);
-		
 //		RConsole.print(this.lineSensorLeft+",");
 //		RConsole.println(this.lineSensorRight+";");
 		

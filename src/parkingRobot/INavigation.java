@@ -206,6 +206,5 @@ public interface INavigation {
 		public int getMeasurementQuality() {
 			return measurementQuality;
 		}
-
 	}	
 }

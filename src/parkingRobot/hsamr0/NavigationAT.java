@@ -93,11 +93,11 @@ public class NavigationAT implements INavigation{
 	/**
 	 * robot specific constant: radius of left wheel
 	 */
-	static final double LEFT_WHEEL_RADIUS	= 	0.027; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double LEFT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: radius of right wheel
 	 */
-	static final double RIGHT_WHEEL_RADIUS	= 	0.027; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double RIGHT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: distance between wheels
 	 */
@@ -143,8 +143,8 @@ public class NavigationAT implements INavigation{
 		this.monitor = monitor;
 		this.encoderLeft  = perception.getNavigationLeftEncoder();
 		this.encoderRight = perception.getNavigationRightEncoder();
-		this.mouseodo = perception.getNavigationOdo();		
-		
+		this.mouseodo = perception.getNavigationOdo();	
+				
 		navThread.setPriority(Thread.MAX_PRIORITY - 2);
 		navThread.setDaemon(true); // background thread that is not need to terminate in order for the user program to terminate
 		navThread.start();
@@ -156,8 +156,14 @@ public class NavigationAT implements INavigation{
 	/* (non-Javadoc)
 	 * @see parkingRobot.INavigation#setMap(lejos.geom.Line[])
 	 */
+	float target_theta[]; // for complementary filter
 	public void setMap(Line[] map){
 		this.map = map;
+		target_theta = new float[map.length];
+		// initialize target_theta for the complementary filter
+		for(int i=0;i<map.length;i++) {
+			target_theta[i] = (float) Math.atan2(map[i].y2 - map[i].y1, map[i].x2-map[i].x1);
+		}
 	}
 	/* (non-Javadoc)
 	 * @see parkingRobot.INavigation#setDetectionState(boolean)
@@ -237,14 +243,15 @@ public class NavigationAT implements INavigation{
 	
 	/**
 	 * calculates the robot pose from the measurements
-	 */
+	 */    		
+	
 	private void calculateLocation(){
 		float leftAngleSpeed 	= (float)this.angleMeasurementLeft.getAngleSum()  / ((float)this.angleMeasurementLeft.getDeltaT()/1000.0f);  //degree/seconds
 		float rightAngleSpeed 	= (float)this.angleMeasurementRight.getAngleSum() / ((float)this.angleMeasurementRight.getDeltaT()/1000.0f); //degree/seconds
 
 		float vLeft		= (float) ((leftAngleSpeed  * Math.PI * LEFT_WHEEL_RADIUS ) / 180.0f) ; //velocity of left  wheel in m/s
 		float vRight    = (float) ((rightAngleSpeed * Math.PI * RIGHT_WHEEL_RADIUS) / 180.0f) ; //velocity of right wheel in m/s		
-		float w_encoder = (float) ((vRight - vLeft) / WHEEL_DISTANCE); //angular velocity of robot in rad/s
+		float omega_encoder = (float) ((vRight - vLeft) / WHEEL_DISTANCE); //angular velocity of robot in rad/s
 	
 		float xResult 		= 0;
 		float yResult 		= 0;
@@ -254,41 +261,69 @@ public class NavigationAT implements INavigation{
 		
 		float v_encoder    = (vRight + vLeft)/2.0f;
 	
-		
 		float v = v_encoder;
-		float w = w_encoder;
+		float omega = omega_encoder;
+		
+		int cornerState = updateConnerState(omega,dt);
+		
 		
 		xResult			= (float) (this.pose.getX() + v * Math.cos(this.pose.getHeading()) * dt);
 		yResult			= (float) (this.pose.getY() + v * Math.sin(this.pose.getHeading()) * dt);
-		angleResult 	= this.pose.getHeading() + w * dt;
+		angleResult 	= warpToPi(this.pose.getHeading() + omega * dt);
+			
+		angleResult = angleResult + 0.15f*(warpToPi(target_theta[cornerState]-angleResult));
+		angleResult = warpToPi(angleResult);
 		
-		while(angleResult > Math.PI)
-			angleResult -=  2.0*Math.PI;
-		while(angleResult < -Math.PI)
-			angleResult +=  2.0*Math.PI;
-//		Double R 			= new Double(( WHEEL_DISTANCE / 2 ) * ( (vLeft + vRight) / (vRight - vLeft) ));								
-//		
-//		double ICCx 		= 0;
-//		double ICCy 		= 0;
-//		if (R.isNaN()) { //robot don't move
-//			xResult			= this.pose.getX();
-//			yResult			= this.pose.getY();
-//			angleResult 	= this.pose.getHeading();
-//		} else if (R.isInfinite()) { //robot moves straight forward/backward, vLeft==vRight
-//			xResult			= this.pose.getX() + vLeft * Math.cos(this.pose.getHeading()) * deltaT;
-//			yResult			= this.pose.getY() + vLeft * Math.sin(this.pose.getHeading()) * deltaT;
-//			angleResult 	= this.pose.getHeading();
-//		} else {			
-//			ICCx = this.pose.getX() - R.doubleValue() * Math.sin(this.pose.getHeading());
-//			ICCy = this.pose.getY() + R.doubleValue() * Math.cos(this.pose.getHeading());
-//		
-//			xResult 		= Math.cos(w * deltaT) * (this.pose.getX()-ICCx) - Math.sin(w * deltaT) * (this.pose.getY() - ICCy) + ICCx;
-//			yResult 		= Math.sin(w * deltaT) * (this.pose.getX()-ICCx) + Math.cos(w * deltaT) * (this.pose.getY() - ICCy) + ICCy;
-//			angleResult 	= this.pose.getHeading() + w * deltaT;
-//		}
+		if((cornerState==0)||(cornerState==2)||(cornerState==4)) {
+			yResult = yResult + 0.2f*(map[cornerState].y1*0.01f - yResult);
+		}
+		else {
+			xResult = xResult + 0.2f*(map[cornerState].x1*0.01f - xResult);
+		}
 		
 		this.pose.setLocation((float)xResult, (float)yResult);
 		this.pose.setHeading((float)angleResult);		 
+		
+		RConsole.println(xResult+","+yResult+","+cornerState+";");
+	}
+	
+	static float cornerTriggerTime = 0;
+	static float stateChangedTime = 0;
+	static int currentCornerState = 0;
+	
+	/*
+	 * Check which corner the robot reached
+	 */
+	private int updateConnerState(float omega, float dt) {
+		
+		if(Math.abs(omega) > 1.2) {
+			cornerTriggerTime += dt;
+		}
+		else {
+			cornerTriggerTime = 0.0f;
+		}
+		
+		if((cornerTriggerTime > 0.5)&&(stateChangedTime > 1.0)) {
+			stateChangedTime = 0.0f;
+			cornerTriggerTime = 0.0f;
+			currentCornerState += 1;
+			
+			if(currentCornerState > (map.length-1))
+				currentCornerState = 0;
+		}
+		
+		stateChangedTime += dt;
+		
+		return currentCornerState;
+	}
+	
+	private float warpToPi(float x) {
+		while(x > Math.PI)
+			x -=  2.0f*(float)Math.PI;
+		while(x < -Math.PI)
+			x +=  2.0f*(float)Math.PI;
+		
+		return x;
 	}
 
 	/**

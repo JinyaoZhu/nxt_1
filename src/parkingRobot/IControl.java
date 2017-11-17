@@ -96,7 +96,6 @@ public interface IControl {
 	/**
 	 * execute the selected algorithms for control which was set by guidance
 	 */
-	public void exec_CTRL_ALGO();
-	
+	public void exec_CTRL_ALGO();	
 }
 
