@@ -1,16 +1,20 @@
 package parkingRobot.hsamr0;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import lejos.geom.Line;
+import lejos.geom.Point;
 import lejos.nxt.comm.RConsole;
 import lejos.robotics.navigation.Pose;
 
 import parkingRobot.INavigation;
 import parkingRobot.IPerception;
+import parkingRobot.INavigation.ParkingSlot.ParkingSlotStatus;
 import parkingRobot.IMonitor;
 
 import parkingRobot.hsamr0.NavigationThread;
-
-import parkingRobot.hsamr0.PF;
+import lejos.geom.Point;
 
 
 /**
@@ -93,11 +97,11 @@ public class NavigationAT implements INavigation{
 	/**
 	 * robot specific constant: radius of left wheel
 	 */
-	static final double LEFT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double LEFT_WHEEL_RADIUS	= 	0.029; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: radius of right wheel
 	 */
-	static final double RIGHT_WHEEL_RADIUS	= 	0.028; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final double RIGHT_WHEEL_RADIUS	= 	0.029; // only rough guess, to be measured exactly and maybe refined by experiments
 	/**
 	 * robot specific constant: distance between wheels
 	 */
@@ -129,7 +133,13 @@ public class NavigationAT implements INavigation{
 	 * thread started by the 'Navigation' class for background calculating
 	 */
 	NavigationThread navThread = new NavigationThread(this);
-
+	
+	// my median filter
+	MedianFilter medianfilterIR = new MedianFilter(21);
+	MedianFilter medianfilterEncoderL = new MedianFilter(3);
+	MedianFilter medianfilterEncoderR = new MedianFilter(3);
+	
+	float update_deltaT = 0.02f;
 	
 	/**
 	 * provides the reference transfer so that the class knows its corresponding perception object (to obtain the measurement
@@ -193,12 +203,13 @@ public class NavigationAT implements INavigation{
 		this.updateSensors();
 		
 		// compute pose
-		this.calculateLocation();
-		// particle filter
-//		pf.updatePose(0.0f, 0.0f,1.0f,1.0f,1.0f,1.0f,0.05f);
-		if (this.parkingSlotDetectionIsOn)
-				this.detectParkingSlot();
+		int corner_state = this.calculateLocation();
 		
+		this.setDetectionState(true);
+		
+		if (this.parkingSlotDetectionIsOn)
+				this.detectParkingSlot(this.pose.getX(),this.pose.getY(),
+						this.update_deltaT,(float)frontSideSensorDistance*0.001f,corner_state);
 		
 		// MONITOR (example)
 //		monitor.writeNavigationComment("Navigation");
@@ -235,46 +246,49 @@ public class NavigationAT implements INavigation{
 
 		this.mouseOdoMeasurement	= this.mouseodo.getOdoMeasurement();
 
-		this.frontSensorDistance	= perception.getFrontSensorDistance();
-		this.frontSideSensorDistance = perception.getFrontSideSensorDistance();
-		this.backSensorDistance		= perception.getBackSensorDistance();
-		this.backSideSensorDistance	= perception.getBackSideSensorDistance();
+		this.frontSensorDistance	 = Math.max(40,Math.min(perception.getFrontSensorDistance(),300.0));
+		this.frontSideSensorDistance = Math.max(40,Math.min(perception.getFrontSideSensorDistance(),300.0));
+		this.backSensorDistance		 = Math.max(40,Math.min(perception.getBackSensorDistance(),300.0));
+		this.backSideSensorDistance	 = Math.max(40,Math.min(perception.getBackSideSensorDistance(),300.0));
 	}		 	
 	
 	/**
 	 * calculates the robot pose from the measurements
 	 */    		
 	
-	private void calculateLocation(){
-		float leftAngleSpeed 	= (float)this.angleMeasurementLeft.getAngleSum()  / ((float)this.angleMeasurementLeft.getDeltaT()/1000.0f);  //degree/seconds
-		float rightAngleSpeed 	= (float)this.angleMeasurementRight.getAngleSum() / ((float)this.angleMeasurementRight.getDeltaT()/1000.0f); //degree/seconds
+	private int calculateLocation(){
+		
+		// raw data from perception module
+		float leftAngleSpeed_raw = (float)this.angleMeasurementLeft.getAngleSum()  / ((float)this.angleMeasurementLeft.getDeltaT()/1000.0f);  //degree/seconds
+		float rightAngleSpeed_raw = (float)this.angleMeasurementRight.getAngleSum() / ((float)this.angleMeasurementRight.getDeltaT()/1000.0f); //degree/seconds
+		
+		// apply median filter
+		float leftAngleSpeed 	= medianfilterEncoderL.update(leftAngleSpeed_raw);
+		float rightAngleSpeed 	= medianfilterEncoderR.update(rightAngleSpeed_raw);
 
 		float vLeft		= (float) ((leftAngleSpeed  * Math.PI * LEFT_WHEEL_RADIUS ) / 180.0f) ; //velocity of left  wheel in m/s
 		float vRight    = (float) ((rightAngleSpeed * Math.PI * RIGHT_WHEEL_RADIUS) / 180.0f) ; //velocity of right wheel in m/s		
-		float omega_encoder = (float) ((vRight - vLeft) / WHEEL_DISTANCE); //angular velocity of robot in rad/s
-	
-		float xResult 		= 0;
-		float yResult 		= 0;
-		float angleResult 	= 0;
-		
-		float dt       = (this.angleMeasurementLeft.getDeltaT())/1000.0f;
 		
 		float v_encoder    = (vRight + vLeft)/2.0f;
+		float omega_encoder = (float) ((vRight - vLeft) / WHEEL_DISTANCE); //angular velocity of robot in rad/s
 	
+		float dt       = (this.angleMeasurementLeft.getDeltaT())/1000.0f;
+		update_deltaT = dt;
 		float v = v_encoder;
 		float omega = omega_encoder;
 		
 		int cornerState = updateConnerState(omega,dt);
-		
-		
-		xResult			= (float) (this.pose.getX() + v * Math.cos(this.pose.getHeading()) * dt);
-		yResult			= (float) (this.pose.getY() + v * Math.sin(this.pose.getHeading()) * dt);
-		angleResult 	= warpToPi(this.pose.getHeading() + omega * dt);
+				
+		// update pose the with kinematic model
+		float xResult			= (float) (this.pose.getX() + v * Math.cos(this.pose.getHeading()) * dt);
+		float yResult			= (float) (this.pose.getY() + v * Math.sin(this.pose.getHeading()) * dt);
+		float angleResult 	= warpToPi(this.pose.getHeading() + omega * dt);
 			
+		// fusion with the map information
 		angleResult = angleResult + 0.15f*(warpToPi(target_theta[cornerState]-angleResult));
 		angleResult = warpToPi(angleResult);
 		
-		if((cornerState==0)||(cornerState==2)||(cornerState==4)) {
+		if(cornerState%2==0) {
 			yResult = yResult + 0.2f*(map[cornerState].y1*0.01f - yResult);
 		}
 		else {
@@ -284,12 +298,13 @@ public class NavigationAT implements INavigation{
 		this.pose.setLocation((float)xResult, (float)yResult);
 		this.pose.setHeading((float)angleResult);		 
 		
-		RConsole.println(xResult+","+yResult+","+cornerState+";");
+//		RConsole.println(xResult+","+yResult+","+cornerState+";");
+		return cornerState;
 	}
 	
-	static float cornerTriggerTime = 0;
-	static float stateChangedTime = 0;
-	static int currentCornerState = 0;
+	float cornerTriggerTime = 0;
+	float stateChangedTime = 0;
+	int currentCornerState = 0;
 	
 	/*
 	 * Check which corner the robot reached
@@ -303,7 +318,7 @@ public class NavigationAT implements INavigation{
 			cornerTriggerTime = 0.0f;
 		}
 		
-		if((cornerTriggerTime > 0.5)&&(stateChangedTime > 1.0)) {
+		if((cornerTriggerTime > 0.3)&&(stateChangedTime > 0.8)) {
 			stateChangedTime = 0.0f;
 			cornerTriggerTime = 0.0f;
 			currentCornerState += 1;
@@ -317,6 +332,7 @@ public class NavigationAT implements INavigation{
 		return currentCornerState;
 	}
 	
+	// restraint angle from +pi to -pi
 	private float warpToPi(float x) {
 		while(x > Math.PI)
 			x -=  2.0f*(float)Math.PI;
@@ -329,7 +345,50 @@ public class NavigationAT implements INavigation{
 	/**
 	 * detects parking slots and manage them by initializing new slots, re-characterizing old slots or merge old and detected slots. 
 	 */
-	private void detectParkingSlot(){
-		return; // has to be implemented by students
+	float last_measure_park_detect  = 0;
+	float park_detect_updata_time = 0;
+	List<ParkingSlot> parking_slot_list = new ArrayList<ParkingSlot>();
+	float[] measure_park_detect_FIFO = new float[10];
+	int measure_park_detect_FIFO_index = 0;
+	float distance_to_wall=0;
+	Point parking_start_point,parking_end_point;
+	int last_corner_state = 0;
+	
+	private void detectParkingSlot(float x, float y, float dt,float raw_measure, int corner_state){
+		float measure = medianfilterIR.update(raw_measure);
+		float diff_threshold = 1.5f;
+		float diff = (measure - last_measure_park_detect)/dt;
+		
+		
+		measure_park_detect_FIFO[measure_park_detect_FIFO_index++] = measure;
+		if(measure_park_detect_FIFO_index == 10)
+			measure_park_detect_FIFO_index = 0;
+		
+		if(park_detect_updata_time > 1.0f) {
+			if(diff > diff_threshold) {
+				distance_to_wall = measure_park_detect_FIFO[measure_park_detect_FIFO_index];
+				parking_start_point = new Point(x,y-distance_to_wall);
+				RConsole.println("Parking slot corner 1");
+				park_detect_updata_time = 0;
+			}
+			else if((diff < -diff_threshold)&&(distance_to_wall != 0)) {
+					ParkingSlotStatus status = ParkingSlotStatus.SUITABLE_FOR_PARKING;
+					parking_end_point = new Point(x,y-distance_to_wall);
+					ParkingSlot newPS = new ParkingSlot(0,parking_start_point,parking_end_point, status, 100);
+					parking_slot_list.add(newPS);
+					RConsole.println("add Parking slot");
+					RConsole.println("start:"+parking_start_point.x+","+parking_start_point.y);
+					RConsole.println("end:"+parking_end_point.x+","+parking_end_point.y);
+					distance_to_wall = 0;
+					park_detect_updata_time = 0;
+			}
+		}
+		
+//		if(last_corner_state != corner_state)
+//			park_detect_updata_time = 0;
+		
+		last_measure_park_detect = measure;
+		park_detect_updata_time += dt;
+		last_corner_state = corner_state;
 	}
 }

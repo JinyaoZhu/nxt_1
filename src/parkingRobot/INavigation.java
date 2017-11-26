@@ -206,5 +206,48 @@ public interface INavigation {
 		public int getMeasurementQuality() {
 			return measurementQuality;
 		}
-	}	
+	}
+	
+	// my median filter
+	public class MedianFilter{
+		
+		int window_width; // should be an odd number
+		float buff[];
+		int buff_index =0;
+		
+		public MedianFilter(int width) {
+			
+			if(width%2 == 0)
+				width++;
+			
+			window_width = width;
+			
+			buff = new float[window_width];
+			for(int i=0; i<window_width; i++)
+				buff[i] = 0;
+		}
+		
+		public float update(float x) {
+			buff[buff_index++] = x;
+			if(buff_index >= window_width)
+				buff_index=0;
+			return getMedian();
+		}
+		
+		private float getMedian() {
+			float temp_buff[] = buff.clone();
+			float temp;
+			// bubble sort
+			for(int i=0; i<window_width;i++)
+				for(int j=i+1; j<window_width; j++)
+					if(temp_buff[i] < temp_buff[j]) {
+						temp = temp_buff[j];
+						temp_buff[j] = temp_buff[i];
+						temp_buff[i] = temp;
+					}
+			
+			return temp_buff[(window_width-1)/2];
+		}
+		
+	}
 }

@@ -46,7 +46,7 @@ public class HmiPLT implements INxtHmi{
 	DataOutputStream dataOut;
 	
 	// Whether to control the robot via HMI or directly by pressing buttons on the device
-	protected boolean useHMI;
+	protected boolean useHMI = false;
 	
 	/**
 	 * Check whether the HMI on the Android device is used at all
@@ -109,7 +109,7 @@ public class HmiPLT implements INxtHmi{
 		HmiSenderThread hmiSenderThread = new HmiSenderThread(this, monitor);
 		
 		// Start connect mode (waiting to receive connection request from remote)
-		connect();
+//		connect();
 		
 		// Start the HMI reader and sender threads
 		hmiReaderThread.setName("ReaderThread");

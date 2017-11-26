@@ -16,6 +16,8 @@ import parkingRobot.IMonitor;
 import parkingRobot.hsamr0.PerceptionThread;
 import lejos.nxt.comm.*;
 
+import lejos.nxt.comm.RConsole;
+
 /**
  * Implementation of {@link IPerception}-interface.
  * 
@@ -29,8 +31,8 @@ public class PerceptionPMP implements IPerception {
 	NXTMotor motorRight     = null;
 	IMonitor monitor = null;
 	
-	//!the baudrate for the RS485-connection must be the same as in the arduinocode!
-	static final int RS485_BAUD = 115200;
+	//!the baudrate for the RS485-connection must be the same as in the arduino code!
+	static final int RS485_BAUD = 38400;
 	
 	LightSensor leftLight 	= new LightSensor(SensorPort.S2);
 	LightSensor rightLight 	= new LightSensor(SensorPort.S1);
@@ -82,7 +84,7 @@ public class PerceptionPMP implements IPerception {
 		this.monitor = monitor;
 		
 		//build up a Connection to the Arduino via RS485
-		RS485.hsEnable(RS485_BAUD,14);
+		RS485.hsEnable(RS485_BAUD,readBuffer.length);
 
 		perThread.setPriority(Thread.MAX_PRIORITY - 1);
     	perThread.setDaemon(true); // background thread that is not need to terminate in order for the user program to terminate
@@ -136,78 +138,89 @@ public class PerceptionPMP implements IPerception {
 	}
 	
 	public synchronized void calibrateLineSensors(){
-		float r_sum = 0;
-		float l_sum = 0;
-		LCD.clear();
-		LCD.drawString("Kalibriere", 0, 0);
-		LCD.drawString("Liniensensor", 0, 1);
-		LCD.drawString("Weisser Untergr.", 0, 2);
-		LCD.drawString("wenn position.", 0, 3);
-		LCD.drawString("Enter Druecken", 0, 4);
-		while(!Button.ENTER.isDown()){
-			LCD.drawString("Sensorwert r:"+ (this.RightLineSensor), 0, 6);
-			LCD.drawString("Sensorwert l:"+ (this.LeftLineSensor), 0, 7);
-			updateSensors();
-		}
-		Button.ENTER.waitForPressAndRelease();
-		//MODIFIED START
-		LCD.clear();
-		LCD.drawString("Collecting data:", 0, 0);
-		LCD.drawChar('[', 0, 2);
-		LCD.drawChar(']', 15, 2);
-		for(int i=0;i<1000;i++) {
-			updateSensors();
-			l_sum += this.LeftLineSensor;
-			r_sum += this.RightLineSensor;
-			LCD.drawChar('*', 1+(i/76), 2);
-			LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
-		}
-		this.LSrwhite = (int) (r_sum/1000.0 + 0.5);
-		this.LSlwhite = (int) (l_sum/1000.0 + 0.5);
-		LCD.drawString("L White:"+this.LSlwhite, 0, 3);
-		LCD.drawString("R White:"+this.LSrwhite, 0, 4);
-		LCD.drawString("Finish!", 0, 6);
-		LCD.drawString("Press Enter...", 0, 7);
-		Button.ENTER.waitForPressAndRelease();
-		//MODIFIED END
-		LCD.clear();
-		LCD.drawString("Kalibriere", 0, 0);
-		LCD.drawString("Liniensensor", 0, 1);
-		LCD.drawString("Schwarzer Untergr.", 0, 2);
-		LCD.drawString("wenn position.", 0, 3);
-		LCD.drawString("Enter Druecken", 0, 4);
-		while(!Button.ENTER.isDown()){
-			LCD.drawString("Sensorwert r:"+ (this.RightLineSensor), 0, 6);
-			LCD.drawString("Sensorwert l:"+ (this.LeftLineSensor), 0, 7);
-			updateSensors();
-		}
-		Button.ENTER.waitForPressAndRelease();
-		//MODIFIED START
-		r_sum = l_sum = 0;
-		LCD.clear();
-		LCD.drawString("Collecting data:", 0, 0);
-		LCD.drawChar('[', 0, 2);
-		LCD.drawChar(']', 15, 2);
-		for(int i=0;i<1000;i++) {
-			updateSensors();
-			l_sum += this.LeftLineSensor;
-			r_sum += this.RightLineSensor;
-			LCD.drawChar('*', 1+(i/76), 2);
-			LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
-		}
-		this.LSrblack = (int) (r_sum/1000.0 + 0.5);
-		this.LSlblack = (int) (l_sum/1000.0 + 0.5);
-		LCD.drawString("L BLack:"+this.LSlblack, 0, 3);
-		LCD.drawString("R BLack:"+this.LSrblack, 0, 4);
-		LCD.drawString("Finish!", 0, 6);
-		LCD.drawString("Press Enter...", 0, 7);
-		Button.ENTER.waitForPressAndRelease();
-		if((this.LSrblack >= this.LSrwhite)||(this.LSlblack >= this.LSlwhite)) {
+		
+		boolean is_calibrated = false;
+		
+		while(is_calibrated == false) {
+		
+			float r_sum = 0;
+			float l_sum = 0;
+	
 			LCD.clear();
-			LCD.drawString("Black>=White", 2, 3);
-			LCD.drawString("Error!!!", 5, 5);
+			LCD.drawString("Kalibriere", 0, 0);
+			LCD.drawString("Liniensensor", 0, 1);
+			LCD.drawString("Weisser Untergr.", 0, 2);
+			LCD.drawString("wenn position.", 0, 3);
+			LCD.drawString("Enter Druecken", 0, 4);
+			while(!Button.ENTER.isDown()){
+				LCD.drawString("Sensorwert r:"+ (this.RightLineSensor), 0, 6);
+				LCD.drawString("Sensorwert l:"+ (this.LeftLineSensor), 0, 7);
+				updateSensors();
+			}
 			Button.ENTER.waitForPressAndRelease();
-			System.exit(0);
+			//MODIFIED START
+			LCD.clear();
+			LCD.drawString("Collecting data:", 0, 0);
+			LCD.drawChar('[', 0, 2);
+			LCD.drawChar(']', 15, 2);
+			for(int i=0;i<1000;i++) {
+				updateSensors();
+				l_sum += this.LeftLineSensor;
+				r_sum += this.RightLineSensor;
+				LCD.drawChar('*', 1+(i/76), 2);
+				LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
+			}
+			this.LSrwhite = (int) (r_sum/1000.0 + 0.5);
+			this.LSlwhite = (int) (l_sum/1000.0 + 0.5);
+			LCD.drawString("L White:"+this.LSlwhite, 0, 3);
+			LCD.drawString("R White:"+this.LSrwhite, 0, 4);
+			LCD.drawString("Finish!", 0, 6);
+			LCD.drawString("Press Enter...", 0, 7);
+			Button.ENTER.waitForPressAndRelease();
+			//MODIFIED END
+			LCD.clear();
+			LCD.drawString("Kalibriere", 0, 0);
+			LCD.drawString("Liniensensor", 0, 1);
+			LCD.drawString("Schwarzer Untergr.", 0, 2);
+			LCD.drawString("wenn position.", 0, 3);
+			LCD.drawString("Enter Druecken", 0, 4);
+			while(!Button.ENTER.isDown()){
+				LCD.drawString("Sensorwert r:"+ (this.RightLineSensor), 0, 6);
+				LCD.drawString("Sensorwert l:"+ (this.LeftLineSensor), 0, 7);
+				updateSensors();
+			}
+			Button.ENTER.waitForPressAndRelease();
+			//MODIFIED START
+			r_sum = l_sum = 0;
+			LCD.clear();
+			LCD.drawString("Collecting data:", 0, 0);
+			LCD.drawChar('[', 0, 2);
+			LCD.drawChar(']', 15, 2);
+			for(int i=0;i<1000;i++) {
+				updateSensors();
+				l_sum += this.LeftLineSensor;
+				r_sum += this.RightLineSensor;
+				LCD.drawChar('*', 1+(i/76), 2);
+				LCD.drawString((int)(i/10.0+0.5)+"%", 6, 2);
+			}
+			this.LSrblack = (int) (r_sum/1000.0 + 0.5);
+			this.LSlblack = (int) (l_sum/1000.0 + 0.5);
+			LCD.drawString("L Black:"+this.LSlblack, 0, 3);
+			LCD.drawString("R Black:"+this.LSrblack, 0, 4);
+			LCD.drawString("Finish!", 0, 6);
+			LCD.drawString("Press Enter...", 0, 7);
+			Button.ENTER.waitForPressAndRelease();
+			if((this.LSrblack >= this.LSrwhite)||(this.LSlblack >= this.LSlwhite)) {
+				LCD.clear();
+				LCD.drawString("Black>=White", 2, 3);
+				LCD.drawString("Error!!!", 5, 5);
+				Button.ENTER.waitForPressAndRelease();
+	//			System.exit(0);
+			}
+			else {
+				is_calibrated = true;
+			}
+			LCD.clear();
 		}
 		//MODIFIED END
 	}
@@ -274,17 +287,19 @@ public class PerceptionPMP implements IPerception {
 	
 	
 	public synchronized void updateSensors(){
+		 updateArduinoSensors();
 		 
 		 updateLeftLightSensor();
 		 updateRightLightSensor();
 
-		 updateArduinoSensors();
 		 updateLeftEncoderAngle();
 		 updateRightEncoderAngle();
 		// MONITOR (example)
 //		monitor.writePerceptionComment("Perception");
 	}
+	
 	private void updateArduinoSensors() {
+		
 		//get all actual Measurements from Arduino
 		//send 23 to get the data
 		RS485.hsWrite(sendBuffer,0,sendBuffer.length);
@@ -319,6 +334,8 @@ public class PerceptionPMP implements IPerception {
 
 		this.controlOdo.addShift(this.UOdmometry,this.VOdometry,this.OdometryT);
 		this.navigationOdo.addShift(this.UOdmometry,this.VOdometry,this.OdometryT);
+//		RConsole.println(UOdmometry+","+VOdometry+","+OdometryT+";");
+//		RConsole.println(FrontSensorDistance+","+FrontSideSensorDistance+","+BackSensorDistance+";");
 	}
 
 	
@@ -350,6 +367,16 @@ public class PerceptionPMP implements IPerception {
 		this.controlRightEncoder.addAngle((double)deltaPhi);
 		this.navigationRightEncoder.addAngle((double)deltaPhi);		
 	}	
+	
+	private byte checksum(byte[] input, int len) {
+	    byte checksum = 0;
+	    for (int i=0;i<len;i++) {
+	    	byte cur_byte = input[i];
+	        checksum = (byte) (((checksum & 0xFF) >> 1) + ((checksum & 0x1) << 7)); // Rotate the accumulator
+		checksum = (byte) ((checksum + cur_byte) & 0xFF);                        // Add the next chunk
+	    }
+	    return checksum;
+	}
 }
 
 

@@ -270,136 +270,33 @@ public class ControlRST implements IControl {
     static float omega_line_follow;
 	private void exec_LINECTRL_ALGO(){
 		
-		float v_line_follow = 0.14f;
+		float v_line_follow = 0.15f;
+		int black_threshold = 8;
 				
-		if(lineSensorLeft < 7) {
-			if(lineSensorRight < 7) {
+		if(lineSensorLeft < black_threshold) {
+			if(lineSensorRight < black_threshold) {
 				
 			}
 			else {
-				omega_line_follow = v_line_follow*14.8f;
+				omega_line_follow = v_line_follow*13.0f;
 			}
 		}
 		
-		if(lineSensorRight < 7) {
-			if(lineSensorLeft<7) {
+		if(lineSensorRight < black_threshold) {
+			if(lineSensorLeft<black_threshold) {
 	
 			}
 			else {
-				omega_line_follow = -v_line_follow*14.8f;
+				omega_line_follow = -v_line_follow*13.0f;
 			}
 		}
 		
-		if((lineSensorRight >= 7) && (lineSensorLeft>=7)) {
-			omega_line_follow = (lineSensorRight-lineSensorLeft)*0.007f;
+		if((lineSensorRight >= black_threshold) && (lineSensorLeft>=black_threshold)) {
+			omega_line_follow = (lineSensorRight-lineSensorLeft)*0.008f;
 		}
 		
 		drive(v_line_follow,omega_line_follow);
-//		RConsole.print(this.lineSensorLeft+",");
-//		RConsole.println(this.lineSensorRight+";");
-		
-		
-//		if(accu_time > 2.0f)
-//			drive(0.1f,0.0f);
-//		else
-//			drive(-0.1f,0.0f);
-//	
-//		accu_time += 0.03f;
-//		
-//		if(accu_time>4.0f)
-//			accu_time = 0;
-		
-		
-//		leftMotor.forward();
-//		rightMotor.forward();
-//		
-//		leftMotor.setPower(200);
-//		rightMotor.setPower(0);
-//		
-//		// wait until encoders are updated
-//		while((this.encoderLeft.getUpdateFlag()!=true) ||(this.encoderRight.getUpdateFlag()!=true)) {
-//			try {
-//				Thread.sleep(5);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//		}
-//		
-//		this.angleMeasurementLeft  	= this.encoderLeft.getEncoderMeasurement();
-//		this.angleMeasurementRight 	= this.encoderRight.getEncoderMeasurement();
-//	    float leftAngleSpeed 	= (float)this.angleMeasurementLeft.getAngleSum()  / ((float)this.angleMeasurementLeft.getDeltaT()/1000.0f);  //degree/seconds
-//		float rightAngleSpeed 	= (float)this.angleMeasurementRight.getAngleSum() / ((float)this.angleMeasurementRight.getDeltaT()/1000.0f); //degree/seconds
-//		
-//		
-		
-		
-//		leftMotor.forward();
-//		rightMotor.forward();
-//		int lowPower = 1;
-//		int highPower = 30;
-//		
-//		// MONITOR (example)
-//		monitor.writeControlVar("LeftSensor", "" + this.lineSensorLeft);
-//		monitor.writeControlVar("RightSensor", "" + this.lineSensorRight);
-//
-//        if(this.lineSensorLeft == 2 && (this.lineSensorRight == 1)){
-//			
-//			// when left sensor is on the line, turn left
-//    	    leftMotor.setPower(lowPower);
-//			rightMotor.setPower(highPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn left");
-//			
-//		} 
-//        else if(this.lineSensorRight == 2 && (this.lineSensorLeft == 1)){
-//		
-//			// when right sensor is on the line, turn right
-//			leftMotor.setPower(highPower);
-//			rightMotor.setPower(lowPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn right");
-//		}
-//		else if(this.lineSensorLeft == 2 && (this.lineSensorRight == 0)){
-//			
-//			// when left sensor is on the line, turn left
-//			leftMotor.setPower(lowPower);
-//			rightMotor.setPower(highPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn left");
-//			
-//		} 
-//		else if(this.lineSensorRight == 2 && (this.lineSensorLeft == 0)){
-//		
-//			// when right sensor is on the line, turn right
-//			leftMotor.setPower(highPower);
-//			rightMotor.setPower(lowPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn right");
-//		}
-//		else if(this.lineSensorLeft == 1 && this.lineSensorRight == 0) {
-//				
-//			// when left sensor is on the line, turn left
-//			leftMotor.setPower(lowPower);
-//			rightMotor.setPower(highPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn left");
-//		} 
-//		else if(this.lineSensorRight == 1 && this.lineSensorLeft == 0) {
-//			
-//			// when right sensor is on the line, turn right
-//			leftMotor.setPower(highPower);
-//			rightMotor.setPower(lowPower);
-//			
-//			// MONITOR (example)
-//			monitor.writeControlComment("turn right");
-//		}
-		
+//		drive(0.1f,0);
 	}
 	
 
@@ -460,7 +357,8 @@ public class ControlRST implements IControl {
 		i_error_l += error_omega_l*(float)this.angleMeasurementLeft.getDeltaT()/1000.0f;
 		i_error_r += error_omega_r*(float)this.angleMeasurementRight.getDeltaT()/1000.0f;
 		
-		float omega_to_pwm = 7.80f; //rad per second
+		float omega_to_pwm_l = 9.40f; //rad per second
+		float omega_to_pwm_r = 7.80f; 
 		
 //		RConsole.print(target_omega_l +",");
 //		RConsole.println(leftAngleSpeed +";");
@@ -468,11 +366,11 @@ public class ControlRST implements IControl {
 //		float u_l = omega_to_pwm*(error_omega_l*0.6f + i_error_l*0.0f);
 //		float u_r = omega_to_pwm*(error_omega_r*0.6f + i_error_r*0.0f);
 		
-		float u_l = omega_to_pwm*(error_omega_l*0.0f + i_error_l*0.0f);
-		float u_r = omega_to_pwm*(error_omega_r*0.0f + i_error_r*0.0f);
+		float u_l = omega_to_pwm_l*(error_omega_l*0.0f + i_error_l*0.0f);
+		float u_r = omega_to_pwm_r*(error_omega_r*0.0f + i_error_r*0.0f);
 		
-		power_l = (int) (target_omega_l*omega_to_pwm + u_l + 0.5f);
-		power_r = (int) (target_omega_r*omega_to_pwm + u_r + 0.5f);
+		power_l = (int) (target_omega_l*omega_to_pwm_l + u_l + 0.5f);
+		power_r = (int) (target_omega_r*omega_to_pwm_r + u_r + 0.5f);
 		
 		if (power_l >= 0) {
 			leftMotor.forward();
