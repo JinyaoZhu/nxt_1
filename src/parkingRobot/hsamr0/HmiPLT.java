@@ -109,7 +109,7 @@ public class HmiPLT implements INxtHmi{
 		HmiSenderThread hmiSenderThread = new HmiSenderThread(this, monitor);
 		
 		// Start connect mode (waiting to receive connection request from remote)
-//		connect();
+		connect();
 		
 		// Start the HMI reader and sender threads
 		hmiReaderThread.setName("ReaderThread");

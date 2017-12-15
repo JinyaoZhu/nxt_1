@@ -3,6 +3,7 @@ package parkingRobot.hsamr0;
 import lejos.nxt.Button;
 import lejos.nxt.MotorPort;
 import lejos.nxt.NXTMotor;
+import lejos.nxt.Sound;
 import parkingRobot.IControl;
 import parkingRobot.IControl.*;
 import parkingRobot.INxtHmi;
@@ -38,7 +39,7 @@ import lejos.nxt.comm.RConsole;
  * It is important that data witch is accessed by more than one main module class thread is only handled in a
  * synchronized context to avoid inconsistent or corrupt data!
  */
-public class GuidanceAT {
+public class GuidanceAT_Nav {
 	
 	/**
 	 * states for the main finite state machine. This main states are requirements because they invoke different
@@ -111,10 +112,10 @@ public class GuidanceAT {
 		
 		// Generate objects
 		
-		NXTMotor leftMotor  = new NXTMotor(MotorPort.A);
-		NXTMotor rightMotor = new NXTMotor(MotorPort.B);
+		NXTMotor leftMotor  = new NXTMotor(MotorPort.B);
+		NXTMotor rightMotor = new NXTMotor(MotorPort.A);
 		
-		RConsole.openBluetooth(0);
+//		RConsole.openBluetooth(0);
 		
 		IMonitor monitor = new Monitor();
 		
@@ -126,8 +127,9 @@ public class GuidanceAT {
 		IControl    control    = new ControlRST(perception, navigation, leftMotor, rightMotor, monitor);
 		INxtHmi  	hmi        = new HmiPLT(perception, navigation, control, monitor);
 		
-		monitor.startLogging();
+//		monitor.startLogging();
 		
+		Sound.setVolume(100);
 				
 		while(true) {
 			showData(navigation, perception);
@@ -219,7 +221,7 @@ public class GuidanceAT {
 	 * @return actual state of the main finite state machine
 	 */
 	public static CurrentStatus getCurrentStatus(){
-		return GuidanceAT.currentStatus;
+		return GuidanceAT_Nav.currentStatus;
 	}
 	
 	/**
@@ -248,6 +250,7 @@ public class GuidanceAT {
 		default:
 			break;
 		}
+		LCD.drawString("IR range:"+perception.getFrontSideSensorDistance()+"mm", 0, 5);
 		
 //		perception.showSensorData();
 		

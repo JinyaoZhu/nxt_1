@@ -4,7 +4,7 @@ import java.io.IOException;
 
 import parkingRobot.IMonitor;
 import parkingRobot.INavigation.ParkingSlot;
-import parkingRobot.hsamr0.GuidanceAT;
+import parkingRobot.hsamr0.GuidanceAT_Nav;
 import parkingRobot.hsamr0.HmiPLT.Command;
 import lejos.nxt.comm.RConsole;
 import lejos.robotics.navigation.Pose;
@@ -61,7 +61,7 @@ public class HmiSenderThread extends Thread{
 		{
 			// write status - this has the highest transmission priority, thus it is executed first if thread gets interrupted early 
 			hmi.dataOut.writeInt(Command.OUT_STATUS.ordinal());
-			hmi.dataOut.writeInt(GuidanceAT.getCurrentStatus().ordinal());
+			hmi.dataOut.writeInt(GuidanceAT_Nav.getCurrentStatus().ordinal());
 			hmi.dataOut.flush();
 			RConsole.println("Status data geflusht.");
 			
