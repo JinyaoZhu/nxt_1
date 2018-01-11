@@ -16,8 +16,7 @@ import lejos.robotics.navigation.Pose;
  */
 public interface INavigation {
 	
-	// Inputs 	
-	
+	// Inputs 		
 	/**
 	 * set the map of the line the robot follows while searching for parking slots
 	 * 
@@ -34,6 +33,7 @@ public interface INavigation {
 	 */
 	public void setDetectionState(boolean isOn);
 	
+	public void setParkingState(boolean isOn);
 	
 	// Class control
 	
@@ -232,6 +232,10 @@ public interface INavigation {
 			if(buff_index >= window_width)
 				buff_index=0;
 			return getMedian();
+		}
+		
+		public int getLength() {
+			return window_width;
 		}
 		
 		private float getMedian() {

@@ -1,6 +1,7 @@
 package parkingRobot.hsamr0;
 
 import parkingRobot.IControl;
+import lejos.nxt.comm.RConsole; 
 
 /**
  * thread started by the 'Control' class for background calculating. For simplification each main module class has its own
@@ -24,8 +25,7 @@ public class ControlThread extends Thread {
 	ControlThread(IControl control){
     	this.control = control;
     }
-	
-	
+
 	/* (non-Javadoc)
 	 * @see java.lang.Thread#run()
 	 */

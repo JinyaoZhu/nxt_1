@@ -1,5 +1,6 @@
 package parkingRobot.hsamr0;
 
+import lejos.nxt.comm.RConsole;
 import parkingRobot.INavigation;
 
 /**
@@ -36,8 +37,11 @@ public class NavigationThread extends Thread {
         		// inconsistency or corrupted data. In this example the whole updateNavigation method is
         		// synchronized. If more than one methods are called a synchronized block around all methods
         		// might be necessary!
+        		//float t1 = System.currentTimeMillis();
         		
             	navigation.updateNavigation();
+            	
+            	//RConsole.println((System.currentTimeMillis()-t1)+",");
 	            
             	// A good seep time trade off is necessary:
             	// To less limit the CPU time of other threads,

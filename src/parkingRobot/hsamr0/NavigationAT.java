@@ -125,6 +125,8 @@ public class NavigationAT implements INavigation{
 	 * indicates if parking slot detection should be switched on (true) or off (false)
 	 */
 	boolean parkingSlotDetectionIsOn		= false;
+	
+	boolean isParking                       = false;
 	/**
 	 * pose class containing bundled current X and Y location and corresponding heading angle phi
 	 */
@@ -136,11 +138,14 @@ public class NavigationAT implements INavigation{
 	NavigationThread navThread = new NavigationThread(this);
 	
 	// my median filter
-	MedianFilter medianfilterIR = new MedianFilter(21);
+	MedianFilter medianfilterIR = new MedianFilter(11);
 	MedianFilter medianfilterEncoderL = new MedianFilter(3);
 	MedianFilter medianfilterEncoderR = new MedianFilter(3);
 	
 	float update_deltaT = 0.02f;
+	
+	static final float  MAX_IR_RANGE = 0.30f; //meter
+	static final float  MIN_IR_RANGE = 0.04f;
 	
 	/**
 	 * provides the reference transfer so that the class knows its corresponding perception object (to obtain the measurement
@@ -168,12 +173,15 @@ public class NavigationAT implements INavigation{
 	 * @see parkingRobot.INavigation#setMap(lejos.geom.Line[])
 	 */
 	float target_theta[]; // for complementary filter
+	Point map_corners[];
 	public void setMap(Line[] map){
 		this.map = map;
 		target_theta = new float[map.length];
+		map_corners = new Point[map.length];
 		// initialize target_theta for the complementary filter
 		for(int i=0;i<map.length;i++) {
 			target_theta[i] = (float) Math.atan2(map[i].y2 - map[i].y1, map[i].x2-map[i].x1);
+			map_corners[i] = new Point(map[i].getP1().x*0.01f, map[i].getP1().y*0.01f); // meter
 		}
 	}
 	/* (non-Javadoc)
@@ -181,6 +189,11 @@ public class NavigationAT implements INavigation{
 	 */
 	public void setDetectionState(boolean isOn){
 		this.parkingSlotDetectionIsOn = isOn;
+	}
+	
+	
+	public void setParkingState(boolean isOn){
+		this.isParking = isOn;
 	}
 	
 	
@@ -194,25 +207,23 @@ public class NavigationAT implements INavigation{
 		// wait until sensor are updated. Synchronize with perception thread
 		while((this.encoderLeft.getUpdateFlag()!=true) ||(this.encoderRight.getUpdateFlag()!=true)) {
 			try {
-				Thread.sleep(5);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+				Thread.sleep(2);
+			} catch (InterruptedException e) {}
 		}
+		
 		// get sensor data
 		this.updateSensors();
 		
 		// compute pose
-		int corner_state = this.calculateLocation();
+		int corner_state = this.calculateLocation(this.isParking);
 		
-		this.setDetectionState(true);
-		
-		if (this.parkingSlotDetectionIsOn)
-			if((corner_state==0)||(corner_state==1)||(corner_state==4))
-				this.detectParkingSlot(this.pose.getX(),this.pose.getY(),this.pose.getHeading(),
-						this.update_deltaT,(float)frontSideSensorDistance*0.001f,current_omega,corner_state);
-		
+		if (this.parkingSlotDetectionIsOn && !isParking)
+				this.detectParkingSlot(this.pose,this.update_deltaT,
+						(float)frontSideSensorDistance,current_omega,corner_state);
+		else {
+			distance_to_wall = 0;
+			park_detect_update_time = 0;
+		}
 		// MONITOR (example)
 //		monitor.writeNavigationComment("Navigation");
 	}
@@ -224,13 +235,22 @@ public class NavigationAT implements INavigation{
 	 * @see parkingRobot.INavigation#getPose()
 	 */
 	public synchronized Pose getPose(){
-		return this.pose;
+		Pose p = new Pose();
+		p.setLocation(this.pose.getLocation());
+		p.setHeading(this.pose.getHeading());
+		return p;
 	}
+	
 	/* (non-Javadoc)
 	 * @see parkingRobot.INavigation#getParkingSlots()
 	 */
 	public synchronized ParkingSlot[] getParkingSlots() {
+		
+		if(parking_slot_list.size() == 0)
+			return null;
+		
 		ParkingSlot[] parking_slot_out = new ParkingSlot[parking_slot_list.size()];
+		
 		for(int i=0;i<parking_slot_list.size(); i++) {
 			parking_slot_out[i] = parking_slot_list.get(i);
 		}
@@ -252,10 +272,10 @@ public class NavigationAT implements INavigation{
 
 		this.mouseOdoMeasurement	= this.mouseodo.getOdoMeasurement();
 
-		this.frontSensorDistance	 = Math.max(40,Math.min(perception.getFrontSensorDistance(),300.0));
-		this.frontSideSensorDistance = Math.max(40,Math.min(perception.getFrontSideSensorDistance(),300.0));
-		this.backSensorDistance		 = Math.max(40,Math.min(perception.getBackSensorDistance(),300.0));
-		this.backSideSensorDistance	 = Math.max(40,Math.min(perception.getBackSideSensorDistance(),300.0));
+		this.frontSensorDistance	 = Math.max(MIN_IR_RANGE,Math.min(0.001f*perception.getFrontSensorDistance(),MAX_IR_RANGE));//unit:meter
+		this.frontSideSensorDistance = Math.max(MIN_IR_RANGE,Math.min(0.001f*perception.getFrontSideSensorDistance(),MAX_IR_RANGE));
+		this.backSensorDistance		 = Math.max(MIN_IR_RANGE,Math.min(0.001f*perception.getBackSensorDistance(),MAX_IR_RANGE));
+		this.backSideSensorDistance	 = Math.max(MIN_IR_RANGE,Math.min(0.001f*perception.getBackSideSensorDistance(),MAX_IR_RANGE));
 	}
 	
 	/**
@@ -264,7 +284,7 @@ public class NavigationAT implements INavigation{
 	float current_v = 0;
 	float current_omega = 0;
 	
-	private int calculateLocation(){
+	private int calculateLocation(boolean isParking){
 		
 		// raw data from perception module
 		float leftAngleSpeed_raw = (float)this.angleMeasurementLeft.getAngleSum()  / ((float)this.angleMeasurementLeft.getDeltaT()/1000.0f);  //degree/seconds
@@ -285,75 +305,114 @@ public class NavigationAT implements INavigation{
 		float v = current_v = v_encoder;
 		float omega = current_omega = omega_encoder;
 		
-		int cornerState = updateConnerState(omega,dt);
+		int corner_index = -1;
+		Pose pose = new Pose(this.pose.getX(), this.pose.getY(), this.pose.getHeading());
 				
-		// update pose with kinematic model
-		float xResult	  = (float) (this.pose.getX() + v * Math.cos(this.pose.getHeading()) * dt);
-		float yResult	  = (float) (this.pose.getY() + v * Math.sin(this.pose.getHeading()) * dt);
-		float angleResult = warpToPi(this.pose.getHeading() + omega * dt);
+		// Step 1: update pose with the kinematic model
+		pose = posePredict(pose, v, omega, dt);
 			
-		// fusion with the map information
-		angleResult = angleResult + 0.15f*(warpToPi(target_theta[cornerState]-angleResult));
-		angleResult = warpToPi(angleResult);
-		
-		if(cornerState%2==0) {
-			yResult = yResult + 0.2f*(map[cornerState].y1*0.01f - yResult);
-		}
-		else {
-			xResult = xResult + 0.2f*(map[cornerState].x1*0.01f - xResult);
+		// Step 2: fusion with the map information
+		if(!isParking){
+			corner_index = updateCornerState(omega,dt);
+			pose = poseUpdate(pose, corner_index);
+			//RConsole.println(corner_index+",");
 		}
 		
-		this.pose.setLocation((float)xResult, (float)yResult);
-		this.pose.setHeading((float)angleResult);		 
+		this.pose.setLocation(pose.getLocation());
+		this.pose.setHeading(pose.getHeading());
 		
-//		RConsole.println(xResult+","+yResult+","+cornerState+";");
-		return cornerState;
+		//RConsole.println(xResult+","+yResult+","+angleResult+";");
+		return corner_index;
 	}
 	
-	float cornerTriggerTime = 0;
-	float stateChangedTime = 0;
-	int currentCornerState = 0;
+	private Pose posePredict(Pose last_pose, float v, float omega, float dt) {
+		float x, y, theta;
+		if(Math.abs(omega) > 1e-5) {
+			float R = v/omega;
+			x = (float)(last_pose.getX() + R * (Math.sin(last_pose.getHeading()+dt*omega) - Math.sin(last_pose.getHeading())));
+			y = (float)(last_pose.getY() + R * (Math.cos(last_pose.getHeading()) - Math.cos(last_pose.getHeading()+dt*omega)));
+		}// approximated model
+		else {
+			x	  = (float) (last_pose.getX() + v * Math.cos(last_pose.getHeading()) * dt);
+			y	  = (float) (last_pose.getY() + v * Math.sin(last_pose.getHeading()) * dt);
+		}
+		theta = warpToPi(last_pose.getHeading() + omega * dt);
+		
+		return new Pose(x,y,theta);
+	}
+	
+	
+	private Pose poseUpdate(Pose current_pose, int corner) {
+		float x, y, theta;
+		x = current_pose.getX();
+		y = current_pose.getY();
+		
+		theta = warpToPi(current_pose.getHeading() + 0.1f*(warpToPi(target_theta[corner]-current_pose.getHeading())));
+		
+		if(corner%2==0) {
+			y = current_pose.getY() + 0.1f*(map[corner].y1*0.01f - current_pose.getY());
+		}
+		else {
+			x = current_pose.getX() + 0.1f*(map[corner].x1*0.01f - current_pose.getX());
+		}
+		
+		return new Pose(x,y,theta);
+	}
+	
+	float corner_trigger_time = 0;
+	float state_changed_time = 0;
+	int current_corner_state = 0;
 	
 	/*
 	 * Check which corner the robot reached
 	 */
-	private int updateConnerState(float omega, float dt) {
+	private int updateCornerState(float omega, float dt) {
 		final float omega_trigger = 1.2f; // at least how fast the robot turn at the corner
 		final float corner_time_trigger = 0.3f; // at least how long the robot turn
-		final float state_change_time_threshold = 0.8f; // at least how long since last state-changing
+		final float state_change_time_threshold = 0.8f; // at least how long since last corner-changing
 		
 		if(Math.abs(omega) > omega_trigger) {
-			cornerTriggerTime += dt;
+			corner_trigger_time += dt;
 		}
 		else {
-			cornerTriggerTime = 0.0f;
+			corner_trigger_time = 0.0f;
 		}
 		
-		if((cornerTriggerTime > corner_time_trigger)&&(stateChangedTime > state_change_time_threshold)) {
-			stateChangedTime = 0.0f;
-			cornerTriggerTime = 0.0f;
-			currentCornerState += 1;
+		// update
+		if((corner_trigger_time > corner_time_trigger)&&(state_changed_time > state_change_time_threshold)) {
+			state_changed_time = 0.0f;
+			corner_trigger_time = 0.0f;
 			
-			if(currentCornerState > (map.length-1))
-				currentCornerState = 0;
-			
+			current_corner_state = findClosestCorner(this.pose.getLocation());			
 //			if(is_DEBUG)
 //				Sound.twoBeeps();
 		}
 		
-		stateChangedTime += dt;
+		state_changed_time += dt;
 		
-		return currentCornerState;
+		return current_corner_state;
+	}
+	
+	private int findClosestCorner(Point current_pos) {
+		int closest_index = 0;
+		float min_d = 9999999;
+		for(int i=0; i<map_corners.length; i++) {
+			float d = norm2(map_corners[i], current_pos);
+			if(d < min_d) {
+				min_d = d;
+				closest_index = i;
+			}
+		}
+		return closest_index;
 	}
 	
 	
-	// restraint a angle(rad) from +pi to -pi
+	// constraint an angle(rad) from +pi to -pi
 	private float warpToPi(float x) {
 		while(x > Math.PI)
 			x -=  2.0f*(float)Math.PI;
 		while(x < -Math.PI)
 			x +=  2.0f*(float)Math.PI;
-		
 		return x;
 	}
 
@@ -363,54 +422,76 @@ public class NavigationAT implements INavigation{
 	float last_measure_park_detect  = 0;
 	float park_detect_update_time = 0;
 	List<ParkingSlot> parking_slot_list = new ArrayList<ParkingSlot>();
-	float[] measure_park_detect_FIFO = new float[21];
-	int measure_park_detect_FIFO_index = 0;
+	
+	float[] ir_measure_delay_buff = new float[(int) (medianfilterIR.getLength()*1.5f)];
+	float[] pose_x_delay_buff = new float[(int)(medianfilterIR.getLength()*0.3f)]; // adjust the buffer size to compensate the delay
+	float[] pose_y_delay_buff = new float[pose_x_delay_buff.length]; 
+	float[] pose_theta_delay_buff = new float[pose_x_delay_buff.length];
+	int[] corner_state_delay_buff = new int[pose_x_delay_buff.length];
+	
+	int delay_index = 0;
+	int ir_measure_delay_index = 0;
 	float distance_to_wall=0;
 	Point parking_start_point,parking_end_point;
 	int last_corner_state = 0;
 	
-	private void detectParkingSlot(float x, float y,float theta, float dt,float raw_measure,float omega, int corner_state){
+	private void detectParkingSlot(Pose pose, float dt,float raw_measure,float omega, int corner_state){
 		
 		float measure = medianfilterIR.update(raw_measure);
-		final float diff_threshold = 1.0f;
-		final float update_interval_threshold = 0.6f;
-		final float omega_threshold = 999.5f;
+		final float diff_threshold = 0.6f;
+		final float update_interval_threshold = 0.5f;
 		final float max_diff = 6.0f;
-		final float max_distance_to_wall = 20.0f;
+		
+		float x_delay,y_delay,theta_delay;
+		int corner_state_delay;
+		
 		
 		float diff = (measure - last_measure_park_detect)/dt;
 		diff = Math.max(-max_diff,Math.min(diff,max_diff));//constraint
 		
-//		RConsole.println(diff+","+measure+";");
+		//RConsole.println(diff+","+measure+";");
 		
-		measure_park_detect_FIFO[measure_park_detect_FIFO_index++] = measure;
+		//compensate the delay cause by the Median Filter
+		ir_measure_delay_buff[ir_measure_delay_index] = measure;
+		pose_x_delay_buff[delay_index] = pose.getX();
+		pose_y_delay_buff[delay_index] = pose.getY();
+		pose_theta_delay_buff[delay_index] = pose.getHeading();
+		corner_state_delay_buff[delay_index] = corner_state;
+		delay_index++;
+		ir_measure_delay_index++;
+		if(delay_index == pose_x_delay_buff.length) delay_index = 0;
+		if(ir_measure_delay_index == ir_measure_delay_buff.length) ir_measure_delay_index = 0;
 		
-		if(measure_park_detect_FIFO_index == measure_park_detect_FIFO.length) 
-			measure_park_detect_FIFO_index = 0;
+		x_delay = pose_x_delay_buff[delay_index];
+		y_delay = pose_y_delay_buff[delay_index];
+		theta_delay = pose_theta_delay_buff[delay_index];
+		corner_state_delay = corner_state_delay_buff[delay_index];
 		
-		
-		if((park_detect_update_time > update_interval_threshold)&&(Math.abs(omega) < omega_threshold)) {
-			if((last_measure_park_detect != 0.30f)&&(measure == 0.30f)) {
-				distance_to_wall = measure_park_detect_FIFO[measure_park_detect_FIFO_index]+0.05f;//plus offset
+		if((park_detect_update_time > update_interval_threshold)&&((corner_state_delay == 0)||(corner_state_delay == 1)||(corner_state_delay == 4))) {
+			
+			if((last_measure_park_detect < MAX_IR_RANGE)&&(measure == MAX_IR_RANGE)) {
+				//distance_to_wall = ir_measure_delay_buff[ir_measure_delay_index]+0.05f;//plus offset
 				
-				parking_start_point = new Point(x+(float)Math.sin(theta)*distance_to_wall,y-(float)Math.cos(theta)*distance_to_wall);
+				distance_to_wall = 0.18f;
+				
+				parking_start_point = new Point(x_delay+(float)Math.sin(theta_delay)*distance_to_wall,y_delay-(float)Math.cos(theta_delay)*distance_to_wall);
 				
 //				RConsole.println("Detected start point");
 				park_detect_update_time = 0;
-				Sound.playNote(Sound.PIANO,2000, 100);
+				//Sound.playNote(Sound.PIANO,1000, 20);
 			}
-			else if(((last_measure_park_detect == 0.30f)&&(measure != 0.30f))&&(distance_to_wall != 0)&&(distance_to_wall <= max_distance_to_wall)) {
+			else if((last_measure_park_detect == MAX_IR_RANGE)&&(measure < MAX_IR_RANGE)&&(distance_to_wall != 0)) {
 					ParkingSlotStatus status;
 					
-					parking_end_point = new Point(x+(float)Math.sin(theta)*distance_to_wall,y-(float)Math.cos(theta)*distance_to_wall);
+					parking_end_point = new Point(x_delay+(float)Math.sin(theta_delay)*distance_to_wall,y_delay-(float)Math.cos(theta_delay)*distance_to_wall);
 					
-					if(distance2(parking_start_point,parking_end_point) > 0.30f)
+					if(norm2(parking_start_point,parking_end_point) > 0.45f)
 						status = ParkingSlotStatus.SUITABLE_FOR_PARKING;
 					else
 						status = ParkingSlotStatus.NOT_SUITABLE_FOR_PARKING;
 					
 					float Qm = Math.abs(diff)/max_diff*100.0f;//measurement quality
-					ParkingSlot new_pks = new ParkingSlot(parking_slot_list.size(),parking_start_point,parking_end_point, status, (int)Qm);
+					ParkingSlot new_pks = new ParkingSlot(1+parking_slot_list.size(),parking_start_point,parking_end_point, status, (int)Qm);
 					
 					// matching with old parking slots
 					int match_index = matchParkingSlot(new_pks,parking_slot_list);
@@ -448,27 +529,26 @@ public class NavigationAT implements INavigation{
 							RConsole.println("Qm:"+update_Q_m);
 						}
 					}
-				
 //				    Sound.buzz();
-					Sound.playNote(Sound.PIANO,2000, 100);
-					
+					Sound.playNote(Sound.PIANO,2000, 20);			
 					distance_to_wall = 0;
 					park_detect_update_time = 0;
 			}
 		}
 		
 		// at the corner reset the timer
-		if(last_corner_state != corner_state) {
-			if(corner_state == 4)
+		if(last_corner_state != corner_state_delay) {
+			if(corner_state_delay == 4)
 				park_detect_update_time = -1.0f;
-			else
-				park_detect_update_time = 0;
+			//else
+			//	park_detect_update_time = 0;
 			distance_to_wall = 0;
 		}
 		
 		last_measure_park_detect = measure;
 		park_detect_update_time += dt;
-		last_corner_state = corner_state;
+		last_corner_state = corner_state_delay;
+		//RConsole.println(measure+","+corner_state_delay+","+ distance_to_wall +","+park_detect_update_time+",");
 	}
 	
 	/**
@@ -494,9 +574,8 @@ public class NavigationAT implements INavigation{
 			ParkingSlot old_pks = pks_list.get(i);
 			Point old_p1 = old_pks.getFrontBoundaryPosition();
 			Point old_p2 = old_pks.getBackBoundaryPosition();
-			float d1 = distance2(new_p1,old_p1); // distance between new and old front points
-			float d2 = distance2(new_p2,old_p2); // distance between new and old back points
-			//TODO: take measurement quality into consideration
+			float d1 = norm2(new_p1,old_p1); // distance between new and old front points
+			float d2 = norm2(new_p2,old_p2); // distance between new and old back points
 			if((d1+d2)<d) {
 				d = d1+d2;
 				match_index = i;
@@ -508,7 +587,7 @@ public class NavigationAT implements INavigation{
 			return match_index;
 		}
 		else
-			return -1;
+			return -1; // no match found
 	}
 	
 	// fast sqrt
@@ -522,13 +601,13 @@ public class NavigationAT implements INavigation{
 	}
 	
 	// distance between two points
-	private float distance2(Point p1,Point p2) {
+	private float norm2(Point p1,Point p2) {
 		float x2 = (p1.x-p2.x)*(p1.x-p2.x);
 		float y2 = (p1.y-p2.y)*(p1.y-p2.y);
 		return 1.0f/invSqrt(x2+y2);
 	}
 	
-	// merge two points with weight
+	// merge two points with weights
 	private Point merge2Point(Point p1,Point p2,float w1, float w2) {
 		
 		float w_sum = w1+w2;

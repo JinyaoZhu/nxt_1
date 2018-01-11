@@ -40,7 +40,11 @@ public interface IControl {
 		/**
 		 * NXT in Ruhe versetzen
 		 */
-		INACTIVE
+		INACTIVE,
+		
+		PARK_CTRL1,
+		
+		PARK_CTRL2
 	}
 	
 		
@@ -92,6 +96,7 @@ public interface IControl {
 	 */
 	public void setStartTime(int startTime);
 	
+	public ControlMode getControlMode();
 	
 	/**
 	 * execute the selected algorithms for control which was set by guidance
