@@ -106,7 +106,7 @@ public class NavigationAT implements INavigation{
 	/**
 	 * robot specific constant: distance between wheels
 	 */
-	static final float WHEEL_DISTANCE		= 	0.1400f; // only rough guess, to be measured exactly and maybe refined by experiments
+	static final float WHEEL_DISTANCE		= 	0.135f; // only rough guess, to be measured exactly and maybe refined by experiments
 
 	
 	/**
@@ -138,7 +138,7 @@ public class NavigationAT implements INavigation{
 	NavigationThread navThread = new NavigationThread(this);
 	
 	// my median filter
-	MedianFilter medianfilterIR = new MedianFilter(11);
+	MedianFilter medianfilterIR = new MedianFilter(7);
 	MedianFilter medianfilterEncoderL = new MedianFilter(3);
 	MedianFilter medianfilterEncoderR = new MedianFilter(3);
 	
@@ -424,7 +424,7 @@ public class NavigationAT implements INavigation{
 	List<ParkingSlot> parking_slot_list = new ArrayList<ParkingSlot>();
 	
 	float[] ir_measure_delay_buff = new float[(int) (medianfilterIR.getLength()*1.5f)];
-	float[] pose_x_delay_buff = new float[(int)(medianfilterIR.getLength()*0.3f)]; // adjust the buffer size to compensate the delay
+	float[] pose_x_delay_buff = new float[(int)(medianfilterIR.getLength()*0.2f)]; // adjust the buffer size to compensate the delay
 	float[] pose_y_delay_buff = new float[pose_x_delay_buff.length]; 
 	float[] pose_theta_delay_buff = new float[pose_x_delay_buff.length];
 	int[] corner_state_delay_buff = new int[pose_x_delay_buff.length];
@@ -472,7 +472,7 @@ public class NavigationAT implements INavigation{
 			if((last_measure_park_detect < MAX_IR_RANGE)&&(measure == MAX_IR_RANGE)) {
 				//distance_to_wall = ir_measure_delay_buff[ir_measure_delay_index]+0.05f;//plus offset
 				
-				distance_to_wall = 0.18f;
+				distance_to_wall = 0.15f;
 				
 				parking_start_point = new Point(x_delay+(float)Math.sin(theta_delay)*distance_to_wall,y_delay-(float)Math.cos(theta_delay)*distance_to_wall);
 				

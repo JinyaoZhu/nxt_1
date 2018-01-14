@@ -177,7 +177,7 @@ public class ControlRST implements IControl {
 		
 		this.ctrlThread = new ControlThread(this);
 		
-		ctrlThread.setPriority(Thread.MAX_PRIORITY - 1);
+		ctrlThread.setPriority(Thread.MAX_PRIORITY - 2);
 		ctrlThread.setDaemon(true); // background thread that is not need to terminate in order for the user program to terminate
 		ctrlThread.start();
 	}
@@ -292,8 +292,9 @@ public class ControlRST implements IControl {
 	private void update_PARKCTRL_Parameter(){
 		//Aufgabe 3.4
 		setPose(navigation.getPose());
-		T_rechnen();
-		EinfahrRichtungBestimmen();		
+		
+		//T_rechnen();
+		//EinfahrRichtungBestimmen();		
 	}
 	private void EinfahrRichtungBestimmen(){
 		float x = startPosition.getX();
@@ -421,17 +422,89 @@ public class ControlRST implements IControl {
 	 * PARKING along the generated path
 	 */
    int Einpark_Counter=0;
+   float a3, a2;
+   float sx, sy, st, cos_t, sin_t;
+
+   public void setParameter(double a_2, double a_3) {
+	   a3 = (float) a_3;
+	   a2 = (float) a_2;
+   }
+   
+   public void setStart(double x, double y, double t) {
+	   sx = (float) x;
+	   sy = (float) y;
+	   st = (float)t;
+	   cos_t = (float) Math.cos(t);
+	   sin_t = (float) Math.sin(t);
+   }
+   
+   float last_d1 = 0;
+   float last_e = 0;
+   
 	private void exec_PARKCTRL1_ALGO(){
 		//Aufgabe 3.4
 		//RConsole.println( navigation.getPose().getX()+","+navigation.getPose().getY()+";");
-		if(Einpark_Counter < Einpark_V.length)
-		  drive(Einpark_V[Einpark_Counter],Einpark_W[Einpark_Counter]);
-		else {
-			this.currentCTRLMODE = ControlMode.INACTIVE;
-			Einpark_Counter = 0;
+//		if(Einpark_Counter < Einpark_V.length)
+//		  drive(Einpark_V[Einpark_Counter],Einpark_W[Einpark_Counter]);
+//		else {
+//			this.currentCTRLMODE = ControlMode.INACTIVE;
+//			Einpark_Counter = 0;
+//		}
+//		Einpark_Counter++;
+		float f = 9999;
+		int N = 0;
+		float _px = this.currentPosition.getX() - sx;
+		float _py = this.currentPosition.getY() - sy;
+		float px = (float)( cos_t*_px + sin_t*_py);
+		float py = (float)(-sin_t*_px + cos_t*_py);
+		float x2 = px;
+		float x2_2 = 0;
+		float x2_3 = 0;
+		while((N < 20)&&(Math.abs(f) > 0.001)) {
+		  x2_2 = x2*x2;
+		  x2_3 = x2_2*x2;
+		  f = 2.0f*(x2 - px) + 2.0f*(3.0f*a3*x2_2 + 2.0f*a2*x2)*(a3*x2_3 + a2*x2_2 - py);
+		  x2 = x2 - 0.05f*f;
+		  N++;
 		}
-		Einpark_Counter++;
+		x2_2 = x2*x2;
+		x2_3 = x2_2*x2;
+		float y2 = a3*x2_3 + a2*x2_2;
+		float d1 = (float)Math.sqrt((px-x2)*(px-x2)+(py-y2)*(py-y2));
+		float tx, ty;
+		tx = this.destination.getX();
+		ty = this.destination.getY();
+		float d2 = (float)Math.sqrt((px-tx)*(px-tx)+(py-ty)*(py-ty));
+//		RConsole.println(d1+","+d2+";");
+		if((d2 < 0.10)||(px >= tx)||(x2 > tx)) {
+			float e = st - currentPosition.getHeading();
+			
+			while(e > Math.PI)
+				e -= 2.0*Math.PI;
+			while(e < -Math.PI)
+			    e += 2.0*Math.PI;
+			
+			if(Math.abs(e) < 0.02) {
+			  this.currentCTRLMODE = ControlMode.INACTIVE;
+			  last_d1 = 0;
+			}
+			else
+			  drive(0.05,e*3.0f + (e-last_e)*0.2f);
+			
+			last_e = e;
+		}
+		else {
+			last_e = st - currentPosition.getHeading();
+			float w = d1*20.0f + (d1-last_d1)*10.0f;
+			if(py > y2)
+			  drive(0.08,-w);
+			else
+			  drive(0.08, w);
+		}
+		
+		last_d1 = d1;
 	}
+	
 	private void exec_PARKCTRL2_ALGO(){
     	//Aufgabe 3.4
 		if(Einpark_Counter < Einpark_V.length)
@@ -507,7 +580,7 @@ public class ControlRST implements IControl {
 	 */
 	private void exec_LINECTRL_ALGO(){	
 			double kp = 0.00;	//璋冭瘯
-		    double ki = 0.0030;
+		    double ki = 0.002;
 		    double kd = 0.0;
 		    int lasterror = 0;
 		    int preerror = 0;
@@ -630,7 +703,7 @@ public class ControlRST implements IControl {
 					
 		 		/*LeftMotor*/
 			double KLp= 0.5;
-			double KLi = 0.0125;
+			double KLi = 0.1;
 			double KLd = 0.0;
 			double L_error = L_Speed - vLeft;
 			double LeftSpeed = L_Speed_soll +  (KLp*L_error + KLi*L_errorsum + KLd*( L_error - L_lasterror));
@@ -647,7 +720,7 @@ public class ControlRST implements IControl {
 			leftMotor.setPower((int)(LeftSpeed*255.0f)+5);
 				/*RightMotor*/
 			double KRp = 0.5;
-			double KRi = 0.0125;
+			double KRi = 0.1;
 			double KRd = 0;
 			double R_error = R_Speed - vRight;
 			double RightSpeed = R_Speed_soll +  (KRp*R_error + KRi*R_errorsum + KRd*( R_error - R_lasterror));
@@ -664,7 +737,7 @@ public class ControlRST implements IControl {
 				rightMotor.backward();
 			}
 	
-			rightMotor.setPower((int)(RightSpeed*230.38f)+5);
+			rightMotor.setPower((int)(RightSpeed*238.38f)+5);
 			//RConsole.println(vLeft+", "+ vRight + ", " + w_Grad +";");
 		}
 }

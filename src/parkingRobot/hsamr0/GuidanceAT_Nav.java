@@ -124,6 +124,7 @@ public class GuidanceAT_Nav {
       float ParkingSlot_L = 0;
       float ParkingSlot_H = 0;
       Point curr_position;
+      Point out_point_in_map = new Point(0,0);
       int cnt = 0;
 
       // Generate objects
@@ -131,7 +132,7 @@ public class GuidanceAT_Nav {
       NXTMotor leftMotor  = new NXTMotor(MotorPort.B);
       NXTMotor rightMotor = new NXTMotor(MotorPort.A);
 
-      //RConsole.openBluetooth(0);
+//      RConsole.openBluetooth(0);
 
       IMonitor monitor = new Monitor();
 
@@ -145,7 +146,7 @@ public class GuidanceAT_Nav {
 
       //    monitor.startLogging();
 
-      Sound.setVolume(100);
+      Sound.setVolume(50);
 
       while (true) {
         showData(navigation, perception);
@@ -155,6 +156,7 @@ public class GuidanceAT_Nav {
           case DRIVING:
             // MONITOR (example)
             //          monitor.writeGuidanceComment("Guidance_Driving");
+//        	currentStatus =   CurrentStatus.EINPARKEN;
         	
             //Into action
             if ( lastStatus != CurrentStatus.DRIVING ) {
@@ -281,17 +283,26 @@ public class GuidanceAT_Nav {
             	ParkingSlot P = navigation.getParkingSlots()[index];
 	            Point p2 = P.getFrontBoundaryPosition();
 	            Point p1 = P.getBackBoundaryPosition();
+//            	Point p2 = new Point(0.80f,0);
+//            	Point p1 = new Point(0.0f,0);
 	            double d = curr_position.subtract(p1).length();
-	            //RConsole.println(d+","+hmi.getSelectedParkingSlot()+",");
-	            if (d < 0.30f) {
+	            if ((d < 0.25f)&&(perception.getFrontSideSensorDistance() >= 250.0)) {
 	              Sound.buzz();
 	              control.setCtrlMode(ControlMode.INACTIVE);
 	              ParkingSlot_L = p2.subtract(p1).length();
 	              ParkingSlot_H = 0.25f;
-	              pCoeff =  getPathParameters(new Point(0,0), new Point(ParkingSlot_L/2.0f,-ParkingSlot_H));
+	              float theta = navigation.getPose().getHeading();
+	              out_point_in_map.x = ParkingSlot_L*(float)Math.cos(theta) + navigation.getPose().getX();
+	              out_point_in_map.y = ParkingSlot_L*(float)Math.sin(theta) + navigation.getPose().getY();
+//	              float L = Math.max(ParkingSlot_L/2.0f,0.40f);
+	              float L = 0.40f;
+	              pCoeff =  getPathParameters(new Point(0,0), new Point(L,-ParkingSlot_H));
 	              //RConsole.println(pCoeff[0]+","+pCoeff[1]+","+pCoeff[2]+","+pCoeff[3]+",");
 	              //RConsole.println(ParkingSlot_L+","+ParkingSlot_H+",");
 	              navigation.setParkingState(true);
+	              control.setParameter(pCoeff[2],pCoeff[3]);
+	              control.setStart(navigation.getPose().getX(),navigation.getPose().getY(), navigation.getPose().getHeading());
+	              control.setDestination(0, L, -ParkingSlot_H);
 	              control.setCtrlMode(ControlMode.PARK_CTRL1);
 	              parking = true;
 	            }
@@ -305,7 +316,7 @@ public class GuidanceAT_Nav {
             //State transition check
             lastStatus = currentStatus;
             if ( hmi.getMode() == parkingRobot.INxtHmi.Mode.PAUSE ) {
-              currentStatus = CurrentStatus.INACTIVE;
+              //currentStatus = CurrentStatus.INACTIVE;
             }
             else if ( Button.ENTER.isDown() ) {
               currentStatus = CurrentStatus.INACTIVE;
@@ -325,6 +336,8 @@ public class GuidanceAT_Nav {
             else if (parkStatus == 1) {
               control.setCtrlMode(ControlMode.INACTIVE);
               currentStatus = CurrentStatus.INACTIVE;
+              //Thread.sleep(1000);
+//              currentStatus = CurrentStatus.AUSPARKEN;
               parking = false;
             }
             //Leave action
@@ -347,8 +360,18 @@ public class GuidanceAT_Nav {
                 
                  if(leaving == false)
                  {
-     	            pCoeff =  getPathParameters(new Point(0,0), new Point(ParkingSlot_L/2.0f,ParkingSlot_H));
-     	            control.setCtrlMode(ControlMode.PARK_CTRL2);
+     	            Point _r_B_p = out_point_in_map.subtract(curr_position);
+     	            Point r_B_p = new Point(0,0);
+     	            float theta = navigation.getPose().getHeading();
+     	            r_B_p.x =  (float) (Math.cos(theta)*_r_B_p.getX() + Math.sin(theta)*_r_B_p.getY());
+     	            r_B_p.y = (float) (-Math.sin(theta)*_r_B_p.getX() + Math.cos(theta)*_r_B_p.getY());
+//     	            float L = (float) Math.max(0.40,r_B_p.x);
+     	           float L = 0.40f;
+     	            pCoeff =  getPathParameters(new Point(0,0), new Point(L,ParkingSlot_H));
+    	            control.setParameter(pCoeff[2],pCoeff[3]);
+ 	                control.setDestination(0,L, ParkingSlot_H);
+ 	                control.setStart(curr_position.getX(),curr_position.getY(), theta);
+ 	                control.setCtrlMode(ControlMode.PARK_CTRL1);
      	            leaving = true;
                  }
             
@@ -481,9 +504,5 @@ public class GuidanceAT_Nav {
       Matrix A_inv = A.inverse();
       Matrix x = A_inv.times(b);
       return x.getColumnPackedCopy(); //[a0,...,a3]
-    }
-    
-    public static double[] getPathCoeff() {
-    	return pCoeff;
     }
 }

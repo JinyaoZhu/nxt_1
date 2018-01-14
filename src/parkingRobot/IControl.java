@@ -80,6 +80,8 @@ public interface IControl {
 	 */	
 	public void setPose(Pose currentPosition); 	
 	
+	public void setParameter(double pCoeff, double pCoeff2);
+	public void setStart(double x, double y, double t);
 
 	
 	
@@ -101,6 +103,6 @@ public interface IControl {
 	/**
 	 * execute the selected algorithms for control which was set by guidance
 	 */
-	public void exec_CTRL_ALGO();	
+	public void exec_CTRL_ALGO();
 }
 
